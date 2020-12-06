@@ -17,10 +17,8 @@ class WebsocketSwitch():
         self.ws.on_open=lambda ws: self.setup()
         self.led = led.View(148, 18)
         self.led.start()
-        self.value = False
 
         self.ws.run_forever()
-
 
     def setup(self):
         self.add(self.name, 'Lightbulb', Brightness={"minValue": 0, "maxValue": 255, "minStep": 1}, Hue="default", Saturation="default")
@@ -37,26 +35,44 @@ class WebsocketSwitch():
         self.send('remove', dict(name=name))
 
     def on_set(self, payload):
+        print('Set %s to %s' % (payload['characteristic'], payload['value']))
         if 'On' == payload['characteristic']:
-            payload['value']
-            if payload['value'] and not self.value:
-                self.led.iter = self.led.cycle_wheel()
-            if not payload['value'] and self.value:
-                self.led.fill(0x000000)
-            self.value = payload['value']
+            self.led.on(payload['value'])
 
         if 'Brightness' == payload['characteristic']:
             self.led.brightness(payload['value'])
 
+        if 'Hue' == payload['characteristic']:
+            self.led.hue(payload['value'])
+
+        if 'Saturation' == payload['characteristic']:
+            self.led.saturation(payload['value'])
 
 
     def on_get(self, payload):
-        if 'On' != payload['characteristic']:
-            return
-        self.send('callback',
+        if 'On' == payload['characteristic']:
+            self.send('callback',
                 {"name": self.name,
                  "characteristic": "On",
-                 "value": self.value})
+                 "value": self.led.on()})
+
+        if 'Brightness' == payload['characteristic']:
+            self.send('callback',
+                {"name": self.name,
+                 "characteristic": "Brightness",
+                 "value": self.led.brightness()})
+
+        if 'Hue' == payload['characteristic']:
+            self.send('callback',
+                {"name": self.name,
+                 "characteristic": "Hue",
+                 "value": self.led.hue()})
+
+        if 'Saturation' == payload['characteristic']:
+            self.send('callback',
+                {"name": self.name,
+                 "characteristic": "Saturation",
+                 "value": self.led.saturation()})
 
 
     def on_message(self, raw_message):
