@@ -10,36 +10,45 @@ websocket.enableTrace(True)
 class WebsocketSwitch():
     def __init__(self, url, name):
         self.name = name
-        self.ws = websocket.WebSocketApp(url,
+        self.url = url
+        self.ws = websocket.WebSocketApp(self.url,
                 on_message=lambda ws, m: self.on_message(m),
                 on_close=lambda ws: self.on_close())
         self.ws.on_open=lambda ws: self.setup()
-        self.led = led.Strip()
+        self.led = led.View(148, 18)
+        self.led.start()
         self.value = False
+
         self.ws.run_forever()
 
+
     def setup(self):
-        self.add(self.name, 'Lightbulb')
+        self.add(self.name, 'Lightbulb', Brightness={"minValue": 0, "maxValue": 255, "minStep": 1}, Hue="default", Saturation="default")
 
     def send(self, topic, payload):
         self.ws.send(json.dumps(dict(topic=topic, payload=payload)))
 
-    def add(self, name, service):
-        self.send('add', dict(name=name, service=service))
+    def add(self, name, service, **characteristics):
+        characteristics['name'] = name
+        characteristics['service'] = service
+        self.send('add', characteristics)
 
     def remove(self, name):
         self.send('remove', dict(name=name))
 
     def on_set(self, payload):
-        if 'On' != payload['characteristic']:
-            return
-        if payload['value']:
-            self.thread = threading.Thread(target=lambda: self.led.rainbow_cycle(), args=())
-            self.thread.start()
-            self.value = True
-        else:
-            self.led.fill((0,0,0))
-            self.value = False
+        if 'On' == payload['characteristic']:
+            payload['value']
+            if payload['value'] and not self.value:
+                self.led.iter = self.led.cycle_wheel()
+            if not payload['value'] and self.value:
+                self.led.fill(0x000000)
+            self.value = payload['value']
+
+        if 'Brightness' == payload['characteristic']:
+            self.led.brightness(payload['value'])
+
+
 
     def on_get(self, payload):
         if 'On' != payload['characteristic']:
@@ -65,6 +74,9 @@ class WebsocketSwitch():
 
     def on_close(self):
         self.led.fill((0,0,0))
+
+        self.ws = websocket.create_connection(self.url)
         self.remove(self.name)
+        self.ws.close()
 
 switch = WebsocketSwitch('ws://localhost:4050', 'LED')
