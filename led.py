@@ -7,6 +7,7 @@ import neopixel
 import rpi_ws281x
 import threading
 import itertools
+import math
 
 def view():
     n_led = 148
@@ -28,18 +29,27 @@ class View(threading.Thread):
         self._brightness = 255
         self._hue = 0
         self._saturation = 0
+        self.fill_iter = iter([])
+        self.brightness_iter = iter([self._brightness])
 
-        self.rate = 1/5
+        self.rate = 1/60
         threading.Thread.__init__(self)
 
     def run(self):
         while(True):
             self.draw()
 
-    def brightness(self, brightness=None):
+    def linspace(a, b, n):
+        n = int(n)
+        if n < 2:
+            return iter([b])
+        d = (b - a) / (n - 1)
+        return (int(d * i + a) for i in range(n))
+
+    def brightness(self, brightness=None, anim_duration=0.2):
         if brightness is not None:
+            self.brightness_iter = View.linspace(self._brightness, brightness, anim_duration / self.rate)
             self._brightness = brightness
-            self.strip.setBrightness(self._brightness)
         return self._brightness
 
     def hue(self, hue=None):
@@ -64,26 +74,40 @@ class View(threading.Thread):
         print("%x, %x, %x" % (r,g,b))
         self.fill(r+g+b)
 
-    def on(self, on=None):
+    def on(self, on=None, anim_duration=0.2):
         if not on in (None, self._on):
+            steps = anim_duration / self.rate
             self._on = on
             if on:
+                self.brightness_iter = View.linspace(0, self._brightness, steps)
                 self.iter = self.cycle_wheel()
             else:
-                self.fill(0x000000)
+                self.brightness_iter = View.linspace(self._brightness, 0, steps)
         return self._on
 
     def draw(self):
+        draw = False
         try:
             fill_iter = next(self.iter)
             for i, f in zip(range(self.strip.numPixels()), fill_iter):
                 if type(f) is not int:
                     f = rpi_ws281x.Color(*f)
                 self.strip.setPixelColor(i, f)
-            #print("#%x" % f)
-            self.strip.show()
+            #print("#%6x" % f)
+            draw = True
         except StopIteration:
             pass
+
+        try:
+            brightness = next(self.brightness_iter)
+            self.strip.setBrightness(brightness)
+            draw = True
+            #print(brightness)
+        except StopIteration:
+            pass
+
+        if draw:
+            self.strip.show()
 
         time.sleep(self.rate)
 
@@ -108,10 +132,6 @@ class View(threading.Thread):
                 yield wheel(range(i, max_pos + i, step))
 
 
-    def cycle(self, fill):
-        while True:
-            yield copy.copy(fill)
-
     def fill(self, fill):
         try:
             fill_iter = itertools.cycle(fill)
@@ -121,78 +141,10 @@ class View(threading.Thread):
         self.iter = iter([fill_iter])
 
     def __del__(self):
+        print('Deleting')
         self.fill(0x000000)
         self.draw()
         del(self.strip)
-
-class Strip():
-    def __init__(self):
-        # Choose an open pin connected to the Data In of the NeoPixel strip, i.e. board.D18
-        # NeoPixels must be connected to D10, D12, D18 or D21 to work.
-        pixel_pin = board.D18
-
-        # The number of NeoPixels
-        num_pixels = 149
-
-
-        # The order of the pixel colors - RGB or GRB. Some NeoPixels have red and green reversed!
-        # For RGBW NeoPixels, simply change the ORDER to RGBW or GRBW.
-        order = neopixel.GRB
-
-        self.pixels = neopixel.NeoPixel(
-            pixel_pin, num_pixels, brightness=0.2, auto_write=False, pixel_order=order
-        )
-
-    def wheel(self, pos):
-        # Input a value 0 to 255 to get a color value.
-        # The colours are a transition r - g - b - back to r.
-        if pos < 0 or pos > 255:
-            r = g = b = 0
-        elif pos < 85:
-            r = int(pos * 3)
-            g = int(255 - pos * 3)
-            b = 0
-        elif pos < 170:
-            pos -= 85
-            r = int(255 - pos * 3)
-            g = 0
-            b = int(pos * 3)
-        else:
-            pos -= 170
-            r = 0
-            g = int(pos * 3)
-            b = int(255 - pos * 3)
-        return (r, g, b) if self.pixels.byteorder in (neopixel.RGB, neopixel.GRB) else (r, g, b, 0)
-
-
-    def rainbow_cycle(self, speed=0.5, scale=0.5, rate=60):
-        change = speed * 255 / rate
-        for t in range(int(255)):
-            for i in range(self.pixels.n):
-                self.pixels[i] = self.wheel((i / scale + t * change) % 255)
-            self.pixels.show()
-            time.sleep(1 / rate)
-
-    def fill(self, color):
-        self.pixels.fill(color)
-        self.pixels.show()
-
-def main():
-    s = Strip()
-    while True:
-        try:
-            s.rainbow_cycle()  # rainbow cycle with 1ms delay per step
-        except KeyboardInterrupt:
-            print('Stopping')
-
-            n_steps = 30
-            step = s.pixels.brightness / n_steps
-            for i in range(n_steps):
-                s.pixels.brightness -= step
-                s.pixels.show()
-                time.sleep(0.016)
-            s.pixels.deinit()
-            exit()
 
 
 if __name__ == "__main__":

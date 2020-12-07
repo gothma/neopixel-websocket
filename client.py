@@ -21,7 +21,12 @@ class WebsocketSwitch():
         self.ws.run_forever()
 
     def setup(self):
-        self.add(self.name, 'Lightbulb', Brightness={"minValue": 0, "maxValue": 255, "minStep": 1}, Hue="default", Saturation="default")
+        self.add(self.name,
+                'Lightbulb',
+                Brightness={"minValue": 0, "maxValue": 255, "minStep": 1},
+                #Hue="default",
+                #Saturation="default")
+                )
 
     def send(self, topic, payload):
         self.ws.send(json.dumps(dict(topic=topic, payload=payload)))
