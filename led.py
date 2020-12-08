@@ -17,13 +17,13 @@ def view():
     v.join()
 
 class View(threading.Thread):
-    def __init__(self, n_pixel, pin):
+    def __init__(self, n_pixel, pin, rate=1/60):
         self.strip = rpi_ws281x.PixelStrip(
               num=n_pixel,
               pin=pin,
-              strip_type=rpi_ws281x.WS2811_STRIP_RGB)
+              strip_type=rpi_ws281x.WS2811_STRIP_GRB)
         self.strip.begin()
-
+        self.rate = rate
         self.fill(0x000000)
         self._on = False
         self._brightness = 255
@@ -32,7 +32,6 @@ class View(threading.Thread):
         self.fill_iter = iter([])
         self.brightness_iter = iter([self._brightness])
 
-        self.rate = 1/60
         threading.Thread.__init__(self)
 
     def run(self):
@@ -40,11 +39,22 @@ class View(threading.Thread):
             self.draw()
 
     def linspace(a, b, n):
+        '''
+        >>> list(linspace(1, 3, 3)):
+        [1, 2, 3]
+        '''
         n = int(n)
         if n < 2:
             return iter([b])
         d = (b - a) / (n - 1)
         return (int(d * i + a) for i in range(n))
+
+    def fill_linspace(a, b, n):
+        n = int(n - 1)
+        if n < 1:
+            return iter([end])
+        d = [(b - a) / n for a, b in zip(a, b)]
+        return ((int(d * i + a) for d, a in zip(d, a)) for i in range(n + 1))
 
     def brightness(self, brightness=None, anim_duration=0.2):
         if brightness is not None:
@@ -64,14 +74,12 @@ class View(threading.Thread):
         return self._saturation
 
     def color(self, hue, saturation):
-        print(hue, saturation)
         def f(n):
             k = (n + hue / 60) % 6
             return 1 - saturation * max(0, min(k, 4 - k, 1))
-        r = int(0xff0000 * f(5))
-        g = int(0x00ff00 * f(3))
-        b = int(0x0000ff * f(1))
-        print("%x, %x, %x" % (r,g,b))
+        r = int(0xff0000 * f(5)) & 0xff0000
+        g = int(0x00ff00 * f(3)) & 0x00ff00
+        b = int(0x0000ff * f(1)) & 0x0000ff
         self.fill(r+g+b)
 
     def on(self, on=None, anim_duration=0.2):

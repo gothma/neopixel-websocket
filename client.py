@@ -24,8 +24,8 @@ class WebsocketSwitch():
         self.add(self.name,
                 'Lightbulb',
                 Brightness={"minValue": 0, "maxValue": 255, "minStep": 1},
-                #Hue="default",
-                #Saturation="default")
+                Hue="default",
+                Saturation="default"
                 )
 
     def send(self, topic, payload):
